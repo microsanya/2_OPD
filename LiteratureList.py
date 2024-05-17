@@ -6,9 +6,6 @@ from docx.shared import Pt, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import requests
 
-'''
-AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q
-'''
 class ReferenceApp:
     def __init__(self, root):
         self.root = root
@@ -112,7 +109,7 @@ class ReferenceApp:
         self.title_var.set("")
 
     def get_book_reference(self, author, title):
-        api_key = "YOUR_GOOGLE_BOOKS_API_KEY"  # Замените на ваш ключ API
+        api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q"
         url = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{title}+inauthor:{author}&key={api_key}"
         response = requests.get(url)
         if response.status_code != 200:
@@ -141,28 +138,38 @@ class ReferenceApp:
         else:
             authors_str = ""
 
-        # Поиск города в дополнительной информации
+        # Попытка получить город издания из API Google Books
         city = ""
-        if "industryIdentifiers" in book:
-            identifiers = book["industryIdentifiers"]
-            for identifier in identifiers:
-                if identifier["type"] == "ISBN_13" and identifier["identifier"].startswith("9785"):  # ISBN для России
-                    city = "М.:"
-                    break
+        if "publishedCity" in book:
+            city = book["publishedCity"]
+        else:
+            # Если город издания не указан, пытаемся найти информацию о книге в других источниках
+            city = self.get_city_from_other_sources(author, title)
 
+        # Если город издания не найден, используем город по умолчанию
         if not city:
-            if "Moscow" in publisher or "Москва" in publisher:
-                city = "М.:"
-            elif "Saint Petersburg" in publisher or "Санкт-Петербург" in publisher:
-                city = "СПб.:"
-            else:
-                city = ""
+            city = "Москва"  # Можно выбрать другой город по умолчанию
 
-        publisher = publisher.replace("Moscow", "").replace("Москва", "").replace("Saint Petersburg", "").replace(
-            "Санкт-Петербург", "").strip()
-
-        reference = f"{authors_str}. {title}. {city} {publisher}, {year}. {page_count} c."
+        reference = f"{authors_str}. {title}. {city}: {publisher}, {year}. {page_count} c."
         return reference
+
+    def get_city_from_other_sources(self, author, title):
+        # Попробуем найти информацию о книге в онлайн-библиотеке OpenLibrary
+        url = f"https://openlibrary.org/search.json?author={author}&title={title}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            if "docs" in data and len(data["docs"]) > 0:
+                doc = data["docs"][0]
+                publish_places = doc.get("publish_places", [])
+                if publish_places:
+                    return publish_places[0]  # Возвращаем первое место издания, если оно доступно
+
+        # Если информация не найдена в OpenLibrary, можно попробовать другие источники
+        # Например, каталог WorldCat или другие онлайн-библиотеки
+
+        # Если ничего не найдено, возвращаем None
+        return None
 
 if __name__ == "__main__":
     root = tk.Tk()
