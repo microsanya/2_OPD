@@ -14,7 +14,7 @@ class ReferenceApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Добавление источников в Word-документ")
-        self.root.geometry("800x600")  # Установка размера окна
+        self.root.geometry("800x400")  # Установка размера окна
 
         # Тип источника
         self.source_type_label = tk.Label(root, text="Тип источника:")
@@ -36,6 +36,14 @@ class ReferenceApp:
         self.title_var = tk.StringVar()
         self.title_entry = tk.Entry(root, textvariable=self.title_var)
         self.title_entry.pack()
+
+        tk.Label(self.root, text="URL ресурса:").pack()
+        self.url_entry = tk.Entry(self.root, width=50)
+        self.url_entry.pack()
+
+        tk.Label(self.root, text="Дата обращения:").pack()
+        self.access_date_entry = tk.Entry(self.root, width=15)
+        self.access_date_entry.pack()
 
         # Выбор пути для сохранения файла
         self.save_path_button = tk.Button(root, text="Выбрать путь для сохранения файла", command=self.select_save_path)
@@ -108,9 +116,12 @@ class ReferenceApp:
         source_type = self.source_type_var.get()
         author = self.author_var.get()
         title = self.title_var.get()
-        if not source_type or not author or not title:
+        url = self.url_entry.get()  # Извлечение URL из текстового поля
+        access_date = self.access_date_entry.get()  # Извлечение даты обращения из текстового поля
+        if not source_type or not author or not title or not url or not access_date:
             messagebox.showerror("Ошибка", "Заполните все поля")
             return
+
         if source_type.lower() == "книга":
             reference = self.get_book_reference(author, title)
         elif source_type.lower() == "статья в сборнике":
@@ -125,6 +136,10 @@ class ReferenceApp:
             reference = self.get_patent_reference(author, title)
         elif source_type.lower() == "патент":
             reference = self.get_patent2_reference(author, title)
+        elif source_type.lower() == "электронный ресурс локального доступа":
+            reference = self.get_elres_local(author, title)
+        elif source_type.lower() == "электронный ресурс удалённого доступа":
+            reference = self.get_remote_resource_reference(author, title, url, access_date)
         else:
             reference = f"{source_type} - {author} - {title}"
         self.references.append(reference)
@@ -420,6 +435,18 @@ class ReferenceApp:
                        f" опубл. Дата публикацц(Информация не найдена)"
 
     # Электронный ресурс локального доступа
+    def get_elres_local (author, title):
+        #анрил найти базу для этого, пользователь будет писать в ворде в шаблон
+        reference = f"{author} (если авторов 1 <= x <= 3, иначе пропустить) {title} [Электронный ресурс]" \
+                    f"если авторов 4 и более, записывается первый из них. Если авторов нет, записывается редактор / И.О. Фамилия [и др.].  или / под ред. " \
+                    f"И.О. Фамилия. Город: Издатель, Год. полное название кол-во носителей n носитель " \
+                    f"Сокращённое название носителя"
+        return reference
+
+    # Электронный ресурс удалённого доступа
+    def get_remote_resource_reference(self, author, title, url, access_date):
+        reference = f"{author}. {title}. [Электронный ресурс]: {url} (дата обращения: {access_date})."
+        return reference
 
     # Не всегда в апишках есть город, на всякий еще одну хуйнула
     def get_city_from_other_sources(self, author, title):
