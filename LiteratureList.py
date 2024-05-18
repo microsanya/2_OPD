@@ -1,3 +1,5 @@
+#api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q"
+
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
@@ -40,6 +42,16 @@ class ReferenceApp:
         # Сохранить
         self.save_button = tk.Button(root, text="Сохранить", command=self.save_references)
         self.save_button.pack()
+
+        # Новая метка с информацией для пользователя
+        info_text = (
+            "Для добавления источника информации напишите один из типов: Книга, Статья в сборнике, "
+            "Статья в журнале, Диссертация/автореферат диссертации, ГОСТ, Авторское свидетельство. "
+            "В поле автор нужно вписать 1-го автора, даже если их несколько. Удачи с вашей работой! "
+            "Почта для помощи и обращений: your-email@example.com"
+        )
+        self.info_label = tk.Label(root, text=info_text, wraplength=750, justify='center')
+        self.info_label.pack(pady=20)
 
         self.save_path = None
         self.references = []
@@ -98,6 +110,8 @@ class ReferenceApp:
             return
         if source_type.lower() == "книга":
             reference = self.get_book_reference(author, title)
+        elif source_type.lower() == "статья в сборнике":
+            reference = self.get_collection_article_reference(author, title)
         else:
             reference = f"{source_type} - {author} - {title}"
         self.references.append(reference)
@@ -113,11 +127,11 @@ class ReferenceApp:
         url = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{title}+inauthor:{author}&key={api_key}"
         response = requests.get(url)
         if response.status_code != 200:
-            return f"Книга - {author} - {title} (Не удалось получить информацию)"
+            return f"{author} {title} Город: Издательство, Год Кол-во страниц с.(Не удалось получить информацию)"
 
         data = response.json()
         if "items" not in data or len(data["items"]) == 0:
-            return f"Книга - {author} - {title} (Информация не найдена)"
+            return f"{author} {title} Город: Издательство, Год Кол-во страниц с.(Не удалось получить информацию)"
 
         book = data["items"][0]["volumeInfo"]
         authors = book.get("authors", [])
@@ -153,8 +167,46 @@ class ReferenceApp:
         reference = f"{authors_str}. {title}. {city}: {publisher}, {year}. {page_count} c."
         return reference
 
+    def get_collection_article_reference(self, author, title):
+        url = f"https://api.crossref.org/works?query.author={author}&query.title={title}&rows=1"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return f"Статья в сборнике - {author} - {title} (Не удалось получить информацию)"
+
+        data = response.json()
+        if "message" not in data or "items" not in data["message"] or len(data["message"]["items"]) == 0:
+            return f"{author} {title} // Название сборника: доп. информация, например сб. научных трудов, материалы докл. " \
+                   f"и пр., с указанием кол-ва частей, если есть Кол-во частей Город: Издательство, Номер тома/выпуска и тп " \
+                   f"С. страницы, на которых расположена статья (Информация не найдена)"
+
+        item = data["message"]["items"][0]
+        authors = item.get("author", [])
+        title = item.get("title", [""])[0]
+        container_title = item.get("container-title", [""])[0]
+        publisher = item.get("publisher", "")
+        published_date = item.get("published-print", {}).get("date-parts", [[None]])[0][0] or ""
+        volume = item.get("volume", "")
+        issue = item.get("issue", "")
+        page = item.get("page", "")
+        place = self.get_city_from_other_sources(author, title)
+
+        if len(authors) == 1:
+            authors_str = f"{authors[0]['family']} {authors[0]['given']}"
+        elif 1 < len(authors) <= 3:
+            authors_str = ", ".join([f"{a['family']} {a['given']}" for a in authors])
+        elif len(authors) > 3:
+            authors_str = f"{authors[0]['family']} {authors[0]['given']} [и др.]"
+        else:
+            authors_str = ""
+
+        if not place:
+            place = "Москва"  # Можно выбрать другой город по умолчанию
+
+        volume_info = f"Т. {volume}, В. {issue}" if volume and issue else ""
+        reference = f"{authors_str} {title} // {container_title}: сб. научных трудов. {volume_info} {place}: {publisher}, {published_date}. C. {page}."
+        return reference
+
     def get_city_from_other_sources(self, author, title):
-        # Попробуем найти информацию о книге в онлайн-библиотеке OpenLibrary
         url = f"https://openlibrary.org/search.json?author={author}&title={title}"
         response = requests.get(url)
         if response.status_code == 200:
@@ -164,11 +216,6 @@ class ReferenceApp:
                 publish_places = doc.get("publish_places", [])
                 if publish_places:
                     return publish_places[0]  # Возвращаем первое место издания, если оно доступно
-
-        # Если информация не найдена в OpenLibrary, можно попробовать другие источники
-        # Например, каталог WorldCat или другие онлайн-библиотеки
-
-        # Если ничего не найдено, возвращаем None
         return None
 
 if __name__ == "__main__":
@@ -180,3 +227,4 @@ if __name__ == "__main__":
     add_button.pack()
 
     root.mainloop()
+
