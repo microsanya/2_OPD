@@ -1,4 +1,4 @@
-#api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q"
+#api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q" для гугл апи
 
 import tkinter as tk
 from tkinter import filedialog
@@ -7,6 +7,8 @@ from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import requests
+from datetime import datetime
+import re
 
 class ReferenceApp:
     def __init__(self, root):
@@ -22,14 +24,14 @@ class ReferenceApp:
         self.source_type_entry.pack()
 
         # Автор
-        self.author_label = tk.Label(root, text="Автор:")
+        self.author_label = tk.Label(root, text="Автор/Номер ГОСТа:")
         self.author_label.pack()
         self.author_var = tk.StringVar()
         self.author_entry = tk.Entry(root, textvariable=self.author_var)
         self.author_entry.pack()
 
         # Название
-        self.title_label = tk.Label(root, text="Название:")
+        self.title_label = tk.Label(root, text="Название/Полное название ГОСТа:")
         self.title_label.pack()
         self.title_var = tk.StringVar()
         self.title_entry = tk.Entry(root, textvariable=self.title_var)
@@ -49,8 +51,7 @@ class ReferenceApp:
             "Статья в журнале, Диссертация/автореферат диссертации, ГОСТ, Авторское свидетельство,"
             "Патент, Электронный ресурс локального доступа, Электронный ресурс удалённого доступа."
             "В поле автор нужно вписать 1-го автора, даже если их несколько. Удачи с вашей работой! "
-            "Почта для помощи и обращений: your-email@example.com. ВНИМАНИЕ! Для ГОСТ в поле Автор "
-            "нужно вписывать номер ГОСТа, а в поле Название"
+            "Почта для помощи и обращений: your-email@example.com."
         )
         self.info_label = tk.Label(root, text=info_text, wraplength=750, justify='center')
         self.info_label.pack(pady=20)
@@ -120,10 +121,15 @@ class ReferenceApp:
             reference = self.get_thesis_reference(author, title)
         elif source_type.lower() == "гост":
             reference = self.get_gost_reference(author, title)
+        elif source_type.lower() == "авторское свидетельство":
+            reference = self.get_patent_reference(author, title)
+        elif source_type.lower() == "патент":
+            reference = self.get_patent2_reference(author, title)
         else:
             reference = f"{source_type} - {author} - {title}"
         self.references.append(reference)
         messagebox.showinfo("Добавлено", "Источник добавлен в список")
+
         # Очистка полей ввода
         self.source_type_var.set("")
         self.author_var.set("")
@@ -321,6 +327,101 @@ class ReferenceApp:
 
         return reference
 
+    # Авторское свидетельство
+    def get_patent_reference(self, author, title):
+        api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q"
+        search_engine_id = "b3c479e79bbda4b33"
+
+        query = f"{title} {author}"
+        url = f"https://www.googleapis.com/customsearch/v1?q={query}&cx={search_engine_id}&key={api_key}"
+
+        response = requests.get(url)
+        if response.status_code != 200:
+            return f"{title} а. с. Номер авторского свидетельства Страна №  Код страны Номер заявки А1" \
+                   f"{author}; заявл. Дата заявления; опубл. Дата публикации (Не удалось получить информацию)"
+
+        data = response.json()
+        if "items" not in data or len(data["items"]) == 0:
+            return f"{title} а. с. Номер авторского свидетельства Страна №  Код страны Номер заявки А1" \
+                   f"{author}; заявл. Дата заявления; опубл. Дата публикации (Не удалось получить информацию)"
+
+        # Обработка данных о патенте
+        item = data["items"][0]
+        snippet = item["snippet"]
+
+        # Регулярные выражения для извлечения информации
+        title_pattern = re.compile(r"Название:\s*(.*)")
+        patent_number_pattern = re.compile(r"а\.\s*с\.\s*(\d+)")
+        application_number_pattern = re.compile(r"№\s*SU\s*(\d+)\s*A1")
+        authors_pattern = re.compile(r"Авторы:\s*(.*)")
+        filing_date_pattern = re.compile(r"заявл\.\s*(\d{2}\.\d{2}\.\d{2})")
+        publication_date_pattern = re.compile(r"опубл\.\s*(\d{2}\.\d{2}\.\d{2})")
+
+        # Поиск соответствий в snippet
+        title_match = title_pattern.search(snippet)
+        patent_number_match = patent_number_pattern.search(snippet)
+        application_number_match = application_number_pattern.search(snippet)
+        authors_match = authors_pattern.search(snippet)
+        filing_date_match = filing_date_pattern.search(snippet)
+        publication_date_match = publication_date_pattern.search(snippet)
+
+        title = title_match.group(1) if title_match else title
+        patent_number = patent_number_match.group(1) if patent_number_match else ""
+        application_number = application_number_match.group(1) if application_number_match else ""
+        authors = authors_match.group(1).split(", ") if authors_match else [author]
+        filing_date = filing_date_match.group(1) if filing_date_match else ""
+        publication_date = publication_date_match.group(1) if publication_date_match else ""
+
+        # Форматирование строки ссылки
+        authors_str = ", ".join([f"{a}" for a in authors])
+        if len(authors) > 3:
+            authors_str = f"{authors[0]} [и др.]"
+
+        reference = (f"{title}: а. с. {patent_number} СССР. "
+                     f"№ SU {application_number} A1 "
+                     f"/ {authors_str}; заявл. {filing_date}; опубл. {publication_date}.")
+        return reference
+
+    # Патент
+    def get_patent2_reference(author, title):
+        base_url = "https://patentsview.org/patents/query"
+
+        # Подготовка запроса к API
+        query = {"q": {"patent_title": title, "inventor_last_name": author.split()[0]},
+                 "f": ["patent_number", "patent_title", "patent_date", "inventor_first_name", "inventor_last_name",
+                       "application_number", "filing_date", "publication_date"]}
+
+        response = requests.get(base_url, params={"q": query})
+
+        if response.status_code == 200:
+            data = response.json()
+            if data['patents']:
+                patent = data['patents'][0]
+                patent_title = patent.get("patent_title", title)
+                patent_number = patent.get("patent_number", "")
+                application_number = patent.get("application_number", "")
+                filing_date = patent.get("filing_date", "")
+                publication_date = patent.get("publication_date", "")
+                inventors = [f"{inv['inventor_first_name'][0]}. {inv['inventor_last_name']}" for inv in
+                             patent.get("inventors", [])]
+                inventors_str = ", ".join(inventors)
+                if len(inventors) > 3:
+                    inventors_str = f"{inventors[0]} [и др.]"
+
+                # Форматирование по шаблону
+                reference = f"{patent_title}: пат. {patent_number} Рос. Федерация. № {application_number} / {inventors_str}.;" \
+                            f" заявл. {filing_date}; опубл. {publication_date}."
+                return reference
+            else:
+                return f"{title}: пат. Номер патента Рос. Федерация. № Номер заявки {author}; заявл. Дата заявления; " \
+                       f" опубл. Дата публикацц(Информация не найдена)"
+        else:
+            return f"{title}: пат. Номер патента Рос. Федерация. № Номер заявки {author}; заявл. Дата заявления; " \
+                       f" опубл. Дата публикацц(Информация не найдена)"
+
+    # Электронный ресурс локального доступа
+
+    # Не всегда в апишках есть город, на всякий еще одну хуйнула
     def get_city_from_other_sources(self, author, title):
         url = f"https://openlibrary.org/search.json?author={author}&title={title}"
         response = requests.get(url)
