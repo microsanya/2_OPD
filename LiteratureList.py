@@ -141,7 +141,7 @@ class ReferenceApp:
         elif source_type.lower() == "электронный ресурс удалённого доступа":
             reference = self.get_remote_resource_reference(author, title, url, access_date)
         else:
-            reference = f"{source_type} - {author} - {title}"
+            reference = f"{source_type} - {author} - {title} (Некорректные данные источника, попробуйте ещё раз)"
         self.references.append(reference)
         messagebox.showinfo("Добавлено", "Источник добавлен в список")
 
@@ -201,7 +201,9 @@ class ReferenceApp:
         url = f"https://api.crossref.org/works?query.author={author}&query.title={title}&rows=1"
         response = requests.get(url)
         if response.status_code != 200:
-            return f"Статья в сборнике - {author} - {title} (Не удалось получить информацию)"
+            return f"{author} {title} // Название сборника: доп. информация, например сб. научных трудов, материалы докл. " \
+                   f"и пр., с указанием кол-ва частей, если есть Кол-во частей Город: Издательство, Номер тома/выпуска и тп " \
+                   f"С. страницы, на которых расположена статья (Информация не найдена)"
 
         data = response.json()
         if "message" not in data or "items" not in data["message"] or len(data["message"]["items"]) == 0:
