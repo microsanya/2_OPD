@@ -18,7 +18,7 @@ class ReferenceApp:
         self.source_type_label = tk.Label(root, text="Тип источника:")
         self.source_type_label.pack()
         self.source_type_var = tk.StringVar()
-        self.source_type_entry = tk.Entry(root, textvariable=self.source_type_var)
+        self.source_type_entry = tk.Entry(root,textvariable=self.source_type_var)
         self.source_type_entry.pack()
 
         # Автор
@@ -46,9 +46,11 @@ class ReferenceApp:
         # Новая метка с информацией для пользователя
         info_text = (
             "Для добавления источника информации напишите один из типов: Книга, Статья в сборнике, "
-            "Статья в журнале, Диссертация/автореферат диссертации, ГОСТ, Авторское свидетельство. "
+            "Статья в журнале, Диссертация/автореферат диссертации, ГОСТ, Авторское свидетельство,"
+            "Патент, Электронный ресурс локального доступа, Электронный ресурс удалённого доступа."
             "В поле автор нужно вписать 1-го автора, даже если их несколько. Удачи с вашей работой! "
-            "Почта для помощи и обращений: your-email@example.com"
+            "Почта для помощи и обращений: your-email@example.com. ВНИМАНИЕ! Для ГОСТ в поле Автор "
+            "нужно вписывать номер ГОСТа, а в поле Название"
         )
         self.info_label = tk.Label(root, text=info_text, wraplength=750, justify='center')
         self.info_label.pack(pady=20)
@@ -112,16 +114,22 @@ class ReferenceApp:
             reference = self.get_book_reference(author, title)
         elif source_type.lower() == "статья в сборнике":
             reference = self.get_collection_article_reference(author, title)
+        elif source_type.lower() == "статья в журнале":
+            reference = self.get_journal_article_reference(author, title)
+        elif source_type.lower() == "диссертация/автореферат диссертации":
+            reference = self.get_thesis_reference(author, title)
+        elif source_type.lower() == "гост":
+            reference = self.get_gost_reference(author, title)
         else:
             reference = f"{source_type} - {author} - {title}"
         self.references.append(reference)
         messagebox.showinfo("Добавлено", "Источник добавлен в список")
-
         # Очистка полей ввода
         self.source_type_var.set("")
         self.author_var.set("")
         self.title_var.set("")
 
+    # Книга
     def get_book_reference(self, author, title):
         api_key = "AIzaSyAHsGmRT8bOhXNPcA6Gb-A8QjzBXAaSd4Q"
         url = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{title}+inauthor:{author}&key={api_key}"
@@ -167,6 +175,7 @@ class ReferenceApp:
         reference = f"{authors_str}. {title}. {city}: {publisher}, {year}. {page_count} c."
         return reference
 
+    # Статья в сборнике
     def get_collection_article_reference(self, author, title):
         url = f"https://api.crossref.org/works?query.author={author}&query.title={title}&rows=1"
         response = requests.get(url)
@@ -203,7 +212,113 @@ class ReferenceApp:
             place = "Москва"  # Можно выбрать другой город по умолчанию
 
         volume_info = f"Т. {volume}, В. {issue}" if volume and issue else ""
-        reference = f"{authors_str} {title} // {container_title}: сб. научных трудов. {volume_info} {place}: {publisher}, {published_date}. C. {page}."
+        reference = f"{authors_str} {title} // {container_title}: сб. научных трудов. {volume_info} {place}: {publisher}, " \
+                    f"{published_date}. C. {page}."
+        return reference
+
+    # Статья в журнале
+    def get_journal_article_reference(self, author, title):
+        url = f"https://api.crossref.org/works?query.author={author}&query.title={title}&filter=type:journal-article&rows=1"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return f"{author} {title}. // Название журнала. Год. №Части и кол-во частей. С. Страницы статьи. " \
+                   f"(Не удалось получить информацию)"
+
+        data = response.json()
+        if "message" not in data or "items" not in data["message"] or len(data["message"]["items"]) == 0:
+            return f"{author} {title}. // Название журнала. Год. №Части и кол-во частей. С. Страницы статьи. " \
+                   f"(Не удалось получить информацию)"
+
+        item = data["message"]["items"][0]
+        authors = item.get("author", [])
+        title = item.get("title", [""])[0]
+        container_title = item.get("container-title", [""])[0]
+        published_date = item.get("published-print", {}).get("date-parts", [[None]])[0][0] or ""
+        issue = item.get("issue", "")
+        page = item.get("page", "")
+
+        if len(authors) == 1:
+            authors_str = f"{authors[0]['family']} {authors[0]['given']}"
+        elif 1 < len(authors) <= 3:
+            authors_str = ", ".join([f"{a['family']} {a['given']}" for a in authors])
+        elif len(authors) > 3:
+            authors_str = f"{authors[0]['family']} {authors[0]['given']} [и др.]"
+        else:
+            authors_str = ""
+
+        reference = f"{authors_str} {title} // {container_title}. {published_date}. № {issue}. С. {page}."
+        return reference
+
+    # Диссертация/автореферат диссертации
+    def get_thesis_reference(self, author, title):
+        # Формируем URL для запроса к API dissercat.com
+        query = f"{author} {title}".replace(" ", "+")
+        url = f"https://www.dissercat.com/api/disser?q={query}"
+
+        # Отправляем GET-запрос
+        response = requests.get(url)
+
+        # Проверяем статус ответа
+        if response.status_code != 200:
+            return f"{author} {title}. доп. информация, диссертация это или автореферат, учёная степень автора " \
+                   f"(магистр, доктор, кандидат) " \
+                   f": дис. … канд. техн. наук.  или : автореф. на соиск. ученой степ. канд. техн. наук. " \
+                   f" Город: Год. Кол-во страниц с.(Информация не найдена)"
+
+        # Получаем JSON-ответ
+        data = response.json()
+
+        # Проверяем наличие результатов
+        if "items" not in data or len(data["items"]) == 0:
+            return f"{author} {title}. доп. информация, диссертация это или автореферат, учёная степень автора " \
+                   f"(магистр, доктор, кандидат) " \
+               f": дис. … канд. техн. наук.  или : автореф. на соиск. ученой степ. канд. техн. наук. " \
+               f" Город: Год. Кол-во страниц с.(Информация не найдена)"
+
+        # Получаем первый результат
+        result = data["items"][0]
+
+        # Извлекаем необходимую информацию
+        author = result.get("author", "")
+        title = result.get("title", "")
+        degree = result.get("degree", "")
+        city = result.get("city", "")
+        year = result.get("year", "")
+        pages = result.get("pages", "")
+
+        # Формируем строку ссылки
+        reference = f"Диссертация/автореферат диссертации - {author}. {title}: {degree}. {city}, {year}. {pages} с."
+
+        return reference
+
+    # ГОСТ
+    def get_gost_reference(gost_number, gost_title):
+        # Формируем запрос к API ГОСТинфо
+        url = f"https://api.gostinfo.ru/gosts?q={gost_number} {gost_title}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return f"ГОСТ {gost_number}. {gost_title} (Не удалось получить информацию)"
+
+        data = response.json()
+        if "items" not in data or len(data["items"]) == 0:
+            return f"ГОСТ {gost_number}. {gost_title} (Информация не найдена)"
+
+        gost_info = data["items"][0]  # Предполагается, что API возвращает информацию о первом найденном ГОСТе
+        city = gost_info.get("city", "")  # Получаем информацию о городе издания
+        publisher = gost_info.get("publisher", "")  # Получаем информацию об издательстве
+        year = gost_info.get("year", "")  # Получаем информацию о годе издания
+        pages = gost_info.get("pages", "")  # Получаем информацию о количестве страниц
+
+        # Оформляем информацию о ГОСТе в виде шаблона
+        reference = f"{gost_number}. {gost_title}. "
+        if city.lower() == "москва":
+            reference += "М.: "
+        elif city.lower() == "санкт-петербург":
+            reference += "СПб.: "
+        else:
+            reference += f"{city}: "
+        reference += f"{publisher}, {year}. {pages} с."
+
         return reference
 
     def get_city_from_other_sources(self, author, title):
@@ -227,4 +342,3 @@ if __name__ == "__main__":
     add_button.pack()
 
     root.mainloop()
-
